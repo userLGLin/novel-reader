@@ -1,0 +1,125 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'models.dart';
+
+/// 本地存储：书籍元数据/设置放 SharedPreferences；
+/// 正文在移动端存应用 Documents 目录的文件，Web 预览时存 prefs（仅供调试）。
+class Store {
+  Store._();
+  static final Store instance = Store._();
+
+  late SharedPreferences _prefs;
+  final List<Book> books = [];
+
+  double fontSize = 18;
+  int themeIndex = 0;
+
+  Future<void> init() async {
+    _prefs = await SharedPreferences.getInstance();
+    fontSize = (_prefs.getDouble('fontSize') ?? 18).clamp(12, 32);
+    themeIndex = (_prefs.getInt('themeIndex') ?? 0).clamp(0, 3);
+    final raw = _prefs.getString('books');
+    if (raw != null) {
+      try {
+        final list = (jsonDecode(raw) as List)
+            .map((e) => Book.fromJson(e as Map<String, dynamic>))
+            .toList();
+        books.addAll(list);
+      } catch (_) {}
+    }
+    _sort();
+  }
+
+  void _sort() {
+    books.sort((a, b) => b.lastReadAt.compareTo(a.lastReadAt));
+  }
+
+  Future<void> _saveBooks() async {
+    _sort();
+    await _prefs.setString('books', jsonEncode(books.map((b) => b.toJson()).toList()));
+  }
+
+  Future<void> setFontSize(double v) async {
+    fontSize = v.clamp(12, 32);
+    await _prefs.setDouble('fontSize', fontSize);
+  }
+
+  Future<void> setThemeIndex(int i) async {
+    themeIndex = i.clamp(0, 3);
+    await _prefs.setInt('themeIndex', themeIndex);
+  }
+
+  Future<Directory> _booksDir() async {
+    final docs = await getApplicationDocumentsDirectory();
+    final dir = Directory('${docs.path}/books');
+    if (!await dir.exists()) await dir.create(recursive: true);
+    return dir;
+  }
+
+  Future<Book> importTxt(String fileName, Uint8List bytes) async {
+    final text = decodeTxt(bytes);
+    if (text.trim().isEmpty) {
+      throw Exception('文件内容为空或无法识别编码');
+    }
+    final id = DateTime.now().millisecondsSinceEpoch.toString();
+    if (kIsWeb) {
+      await _prefs.setString('text_$id', text);
+    } else {
+      final dir = await _booksDir();
+      await File('${dir.path}/$id.txt').writeAsString(text, flush: true);
+    }
+    var title = fileName.split(RegExp(r'[\\/]')).last;
+    if (title.toLowerCase().endsWith('.txt')) {
+      title = title.substring(0, title.length - 4);
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final book = Book(
+      id: id,
+      title: title.isEmpty ? '未命名' : title,
+      addedAt: now,
+      lastReadAt: now,
+      totalChars: text.length,
+    );
+    books.add(book);
+    await _saveBooks();
+    return book;
+  }
+
+  Future<String> loadText(Book book) async {
+    if (kIsWeb) {
+      return _prefs.getString('text_${book.id}') ?? '';
+    }
+    final dir = await _booksDir();
+    return File('${dir.path}/${book.id}.txt').readAsString();
+  }
+
+  Future<void> delete(Book book) async {
+    books.removeWhere((b) => b.id == book.id);
+    if (kIsWeb) {
+      await _prefs.remove('text_${book.id}');
+    } else {
+      final dir = await _booksDir();
+      final f = File('${dir.path}/${book.id}.txt');
+      if (await f.exists()) await f.delete();
+    }
+    await _saveBooks();
+  }
+
+  Future<void> saveProgress(
+    Book book, {
+    required int chapterIndex,
+    required int charOffset,
+    required int absOffset,
+  }) async {
+    book.chapterIndex = chapterIndex;
+    book.charOffset = charOffset;
+    book.absOffset = absOffset;
+    book.lastReadAt = DateTime.now().millisecondsSinceEpoch;
+    await _saveBooks();
+  }
+}
