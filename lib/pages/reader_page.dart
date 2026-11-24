@@ -213,7 +213,8 @@ class _ReaderPageState extends State<ReaderPage> {
       key: _scaffoldKey,
       backgroundColor: theme.bg,
       endDrawer: _buildChapterDrawer(theme),
-      body: AnnotatedRegion(
+      body: MediaQuery.withNoTextScaling(
+        child: AnnotatedRegion(
         value: theme.brightness == Brightness.dark
             ? const SystemUiOverlayStyle(
                 statusBarBrightness: Brightness.dark,
@@ -232,7 +233,8 @@ class _ReaderPageState extends State<ReaderPage> {
                       const headerH = 26.0;
                       const footerH = 26.0;
                       final contentW = c.maxWidth - hPad * 2;
-                      final contentH = c.maxHeight - headerH - footerH;
+                      // 预留 2px 安全余量，避免浮点舍入导致末行被裁
+                      final contentH = c.maxHeight - headerH - footerH - 2;
                       _ensurePages(contentW, contentH);
                       _scheduleJump();
                       return Stack(
@@ -315,6 +317,7 @@ class _ReaderPageState extends State<ReaderPage> {
                       );
                     }),
         ),
+      ),
       ),
     );
   }
