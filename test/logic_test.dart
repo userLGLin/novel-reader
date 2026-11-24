@@ -130,5 +130,21 @@ void main() {
           paginateChapter('', width: 300, height: 400, fontSize: 18);
       expect(pages.length, 1);
     });
+
+    test('增量分页结果与一次性分页一致', () {
+      final text = '这是测试正文，用于验证增量分页。' * 400;
+      final full = paginateChapter(text,
+          width: 320, height: 480, fontSize: 20);
+      final p = ChapterPaginator(text,
+          width: 320, height: 480, fontSize: 20);
+      while (!p.done) {
+        p.advance(2);
+      }
+      expect(p.pages.length, full.length);
+      for (var i = 0; i < full.length; i++) {
+        expect(p.pages[i].start, full[i].start);
+        expect(p.pages[i].end, full[i].end);
+      }
+    });
   });
 }

@@ -9,8 +9,95 @@ class PageSlice {
   const PageSlice(this.start, this.end);
 }
 
-/// 用 TextPainter 实测排版，把章节文本切成一页页。
-/// 每页用二分查找能塞进 maxLines 行的最大字符数，字号/屏幕变化后重新切。
+/// 可增量推进的分页器：一次只算 maxPages 页，供"后台分帧预热"使用。
+/// 用 TextPainter 实测排版，每页二分查找能塞进 maxLines 行的最大字符数。
+class ChapterPaginator {
+  ChapterPaginator(
+    this.text, {
+    required this.width,
+    required this.height,
+    required this.fontSize,
+    this.lineHeightFactor = 1.8,
+  }) : _style = TextStyle(fontSize: fontSize, height: lineHeightFactor) {
+    if (text.isNotEmpty && width > 0 && height > 0) {
+      final probe = _make('汉')..layout();
+      _lineHeight = probe.preferredLineHeight;
+      probe.dispose();
+      _maxLines = math.max(1, (height / _lineHeight).floor());
+      final charsPerLine = math.max(1, (width / fontSize).floor());
+      _maxChars = charsPerLine * _maxLines;
+    }
+  }
+
+  final String text;
+  final double width;
+  final double height;
+  final double fontSize;
+  final double lineHeightFactor;
+  final TextStyle _style;
+
+  double _lineHeight = 0;
+  int _maxLines = 0;
+  int _maxChars = 0;
+
+  final List<PageSlice> pages = [];
+  int _cursor = 0;
+
+  bool get done => text.isEmpty ? pages.isNotEmpty : _cursor >= text.length;
+
+  TextPainter _make(String s, {int? maxLines}) => TextPainter(
+        text: TextSpan(text: s, style: _style),
+        textDirection: TextDirection.ltr,
+        maxLines: maxLines,
+      );
+
+  bool _fits(int start, int end) {
+    final tp = _make(text.substring(start, end), maxLines: _maxLines)
+      ..layout(maxWidth: width);
+    final ok = !tp.didExceedMaxLines;
+    tp.dispose();
+    return ok;
+  }
+
+  /// 最多再计算 maxPages 页
+  void advance(int maxPages) {
+    if (text.isEmpty) {
+      if (pages.isEmpty) pages.add(const PageSlice(0, 0));
+      return;
+    }
+    if (width <= 0 || height <= 0) {
+      if (pages.isEmpty) pages.add(PageSlice(0, text.length));
+      _cursor = text.length;
+      return;
+    }
+    var n = 0;
+    while (_cursor < text.length && n < maxPages) {
+      var hi = math.min(text.length, _cursor + _maxChars * 2 + 2);
+      if (_fits(_cursor, hi)) {
+        pages.add(PageSlice(_cursor, hi));
+        _cursor = hi;
+        n++;
+        continue;
+      }
+      var lo = _cursor + 1;
+      var best = _cursor + 1;
+      while (lo <= hi) {
+        final mid = (lo + hi) >> 1;
+        if (_fits(_cursor, mid)) {
+          best = mid;
+          lo = mid + 1;
+        } else {
+          hi = mid - 1;
+        }
+      }
+      pages.add(PageSlice(_cursor, best));
+      _cursor = best;
+      n++;
+    }
+  }
+}
+
+/// 一次性分完整个章节（页面显示的同步路径）
 List<PageSlice> paginateChapter(
   String text, {
   required double width,
@@ -18,54 +105,14 @@ List<PageSlice> paginateChapter(
   required double fontSize,
   double lineHeightFactor = 1.8,
 }) {
-  if (text.isEmpty || width <= 0 || height <= 0) {
-    return const [PageSlice(0, 0)];
-  }
-  final style = TextStyle(fontSize: fontSize, height: lineHeightFactor);
-
-  TextPainter make(String s, {int? maxLines}) => TextPainter(
-        text: TextSpan(text: s, style: style),
-        textDirection: TextDirection.ltr,
-        maxLines: maxLines,
-      );
-
-  final probe = make('汉')..layout();
-  final lineHeight = probe.preferredLineHeight;
-  probe.dispose();
-  final maxLines = math.max(1, (height / lineHeight).floor());
-  final charsPerLine = math.max(1, (width / fontSize).floor());
-  final maxChars = charsPerLine * maxLines;
-
-  bool fits(int start, int end) {
-    final tp = make(text.substring(start, end), maxLines: maxLines)
-      ..layout(maxWidth: width);
-    final ok = !tp.didExceedMaxLines;
-    tp.dispose();
-    return ok;
-  }
-
-  final pages = <PageSlice>[];
-  var start = 0;
-  while (start < text.length) {
-    var hi = math.min(text.length, start + maxChars * 2 + 2);
-    if (fits(start, hi)) {
-      pages.add(PageSlice(start, hi));
-      start = hi;
-      continue;
-    }
-    var lo = start + 1;
-    var best = start + 1;
-    while (lo <= hi) {
-      final mid = (lo + hi) >> 1;
-      if (fits(start, mid)) {
-        best = mid;
-        lo = mid + 1;
-      } else {
-        hi = mid - 1;
-      }
-    }
-    pages.add(PageSlice(start, best));
-    start = best;
-  }
-  return pages;
+  final p = ChapterPaginator(
+    text,
+    width: width,
+    height: height,
+    fontSize: fontSize,
+    lineHeightFactor: lineHeightFactor,
+  );
+  p.advance(1 << 30);
+  if (p.pages.isEmpty) return const [PageSlice(0, 0)];
+  return List.of(p.pages);
 }

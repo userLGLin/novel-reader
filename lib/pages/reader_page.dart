@@ -32,6 +32,12 @@ class _ReaderPageState extends State<ReaderPage> {
   bool _loading = true;
   String? _error;
 
+  /// 章节分页缓存：键 = 章节|宽度|高度|字号
+  final Map<String, List<PageSlice>> _pageCache = {};
+  String? _prefetchKey;
+  ChapterPaginator? _prefetcher;
+  bool _prefetchRunning = false;
+
   @override
   void initState() {
     super.initState();
@@ -58,28 +64,91 @@ class _ReaderPageState extends State<ReaderPage> {
   Chapter get _chapter => _chapters[_chapterIndex];
   ReaderTheme get _theme => readerThemes[_store.themeIndex];
 
-  /// 尺寸/字号/章节变化时重新分页，并定位到 _offset 所在页
-  void _ensurePages(double w, double h) {
-    final key = '$_chapterIndex|$w|$h|${_store.fontSize}';
-    if (key == _cacheKey) return;
-    _cacheKey = key;
-    final ch = _chapter;
+  /// 取出某章的正文（剥掉与页眉重复的首行标题），返回 [正文, 章内起始偏移]
+  (String, int) _chapterContent(int index) {
+    final ch = _chapters[index];
     var content = _text.substring(ch.start, ch.end);
     var contentStart = 0;
-    // 正文首行就是章节标题时剥掉（页眉已显示标题，避免重复）
     final nl = content.indexOf('\n');
     if (nl > 0 && content.substring(0, nl).trim() == ch.title.trim()) {
       content = content.substring(nl + 1);
       contentStart = nl + 1;
     }
+    return (content, contentStart);
+  }
+
+  /// 尺寸/字号/章节变化时重新分页，并定位到 _offset 所在页
+  void _ensurePages(double w, double h) {
+    final key = '$_chapterIndex|$w|$h|${_store.fontSize}';
+    if (key == _cacheKey) return;
+    _cacheKey = key;
+    final (content, contentStart) = _chapterContent(_chapterIndex);
     _contentStartInChapter = contentStart;
-    _pages = paginateChapter(content,
-        width: w, height: h, fontSize: _store.fontSize);
+    final cached = _pageCache[key];
+    if (cached != null) {
+      _pages = cached;
+    } else {
+      _pages = paginateChapter(content,
+          width: w, height: h, fontSize: _store.fontSize);
+      _putCache(key, _pages);
+    }
     final rel = _offset - contentStart;
     var idx = rel <= 0 ? 0 : _pages.indexWhere((p) => rel < p.end);
     if (idx < 0) idx = _pages.length - 1;
     _pendingJump = idx;
     _currentPage = idx;
+    _schedulePrefetch(w, h);
+  }
+
+  void _putCache(String key, List<PageSlice> pages) {
+    _pageCache[key] = pages;
+    while (_pageCache.length > 10) {
+      _pageCache.remove(_pageCache.keys.first);
+    }
+  }
+
+  /// 分帧预热下一章：每次只算 2 页，避免可感知的卡顿
+  void _schedulePrefetch(double w, double h) {
+    final next = _chapterIndex + 1;
+    if (next >= _chapters.length) return;
+    final key = '$next|$w|$h|${_store.fontSize}';
+    if (_pageCache.containsKey(key)) return;
+    if (_prefetchRunning && _prefetchKey == key) return;
+    final (content, _) = _chapterContent(next);
+    _prefetchKey = key;
+    _prefetcher = ChapterPaginator(content,
+        width: w, height: h, fontSize: _store.fontSize);
+    if (_prefetchRunning) return;
+    _prefetchRunning = true;
+    _runPrefetchStep();
+  }
+
+  void _runPrefetchStep() {
+    if (!mounted) {
+      _prefetchRunning = false;
+      return;
+    }
+    final p = _prefetcher;
+    if (p == null) {
+      _prefetchRunning = false;
+      return;
+    }
+    p.advance(2);
+    if (p.done) {
+      final key = _prefetchKey;
+      if (key != null) _putCache(key, List.of(p.pages));
+      _prefetcher = null;
+      _prefetchKey = null;
+      _prefetchRunning = false;
+      return;
+    }
+    // 借渲染帧的空隙继续算
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _runPrefetchStep();
+      WidgetsBinding.instance.scheduleFrame();
+    });
+    WidgetsBinding.instance.scheduleFrame();
   }
 
   void _scheduleJump() {
