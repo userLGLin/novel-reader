@@ -24,6 +24,7 @@ class _ReaderPageState extends State<ReaderPage> {
   int _chapterIndex = 0;
   int _offset = 0; // 当前章节内字符偏移
   List<PageSlice> _pages = const [PageSlice(0, 0)];
+  int _contentStartInChapter = 0;
   int _currentPage = 0;
   String _cacheKey = '';
   int? _pendingJump;
@@ -63,10 +64,19 @@ class _ReaderPageState extends State<ReaderPage> {
     if (key == _cacheKey) return;
     _cacheKey = key;
     final ch = _chapter;
-    final content = _text.substring(ch.start, ch.end);
+    var content = _text.substring(ch.start, ch.end);
+    var contentStart = 0;
+    // 正文首行就是章节标题时剥掉（页眉已显示标题，避免重复）
+    final nl = content.indexOf('\n');
+    if (nl > 0 && content.substring(0, nl).trim() == ch.title.trim()) {
+      content = content.substring(nl + 1);
+      contentStart = nl + 1;
+    }
+    _contentStartInChapter = contentStart;
     _pages = paginateChapter(content,
         width: w, height: h, fontSize: _store.fontSize);
-    var idx = _pages.indexWhere((p) => _offset < p.end);
+    final rel = _offset - contentStart;
+    var idx = rel <= 0 ? 0 : _pages.indexWhere((p) => rel < p.end);
     if (idx < 0) idx = _pages.length - 1;
     _pendingJump = idx;
     _currentPage = idx;
@@ -93,7 +103,7 @@ class _ReaderPageState extends State<ReaderPage> {
     });
     final ch = _chapter;
     if (idx < _pages.length) {
-      _offset = _pages[idx].start;
+      _offset = _contentStartInChapter + _pages[idx].start;
     } else {
       _offset = ch.end - ch.start; // 章末卡片
     }
@@ -249,8 +259,12 @@ class _ReaderPageState extends State<ReaderPage> {
                                     alignment: Alignment.topLeft,
                                     child: Text(
                                       _text.substring(
-                                          _chapter.start + p.start,
-                                          _chapter.start + p.end),
+                                          _chapter.start +
+                                              _contentStartInChapter +
+                                              p.start,
+                                          _chapter.start +
+                                              _contentStartInChapter +
+                                              p.end),
                                       style: TextStyle(
                                         fontSize: _store.fontSize,
                                         height: 1.8,

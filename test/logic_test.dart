@@ -12,28 +12,35 @@ void main() {
   group('decodeTxt', () {
     test('UTF-8 正常解码', () {
       final bytes = Uint8List.fromList(utf8.encode('第一章 起点\n正文内容'));
-      expect(decodeTxt(bytes), '第一章 起点\n正文内容');
+      expect(decodeTxt(bytes), '第一章 起点\n　　正文内容');
     });
 
     test('UTF-8 BOM 被去掉', () {
       final bytes =
           Uint8List.fromList([0xEF, 0xBB, 0xBF, ...utf8.encode('你好')]);
-      expect(decodeTxt(bytes), '你好');
+      expect(decodeTxt(bytes), '　　你好');
     });
 
     test('GBK 回退解码', () {
       final bytes = Uint8List.fromList(gbk.encode('第一章 测试\n中文内容'));
-      expect(decodeTxt(bytes), '第一章 测试\n中文内容');
+      expect(decodeTxt(bytes), '第一章 测试\n　　中文内容');
     });
 
     test('CRLF 归一化', () {
       final bytes = Uint8List.fromList(utf8.encode('a\r\nb\rc'));
-      expect(decodeTxt(bytes), 'a\nb\nc');
+      expect(decodeTxt(bytes), '　　a\n　　b\n　　c');
     });
 
     test('连续空格分隔的段落转成换行', () {
       final bytes = Uint8List.fromList(utf8.encode('第一段。    第二段。\n第三段。'));
-      expect(decodeTxt(bytes), '第一段。\n第二段。\n第三段。');
+      expect(decodeTxt(bytes), '　　第一段。\n　　第二段。\n　　第三段。');
+    });
+
+    test('正文首行缩进两字，章节标题行不缩进', () {
+      final bytes = Uint8List.fromList(
+          utf8.encode('第一章 开始\n正文第一段。\n第二章 转折\n正文第二段。'));
+      expect(decodeTxt(bytes),
+          '第一章 开始\n　　正文第一段。\n第二章 转折\n　　正文第二段。');
     });
   });
 

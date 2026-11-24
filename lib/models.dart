@@ -77,6 +77,20 @@ String decodeTxt(Uint8List bytes) {
   }
   // 部分 TXT 用连续空格（而非换行）分隔段落，转成换行以便正常排版
   text = text.replaceAll(RegExp(r'[ \t]{2,}'), '\n');
+  // 正文段落统一首行缩进两字（章节标题行不动）
+  final lines = text.split('\n');
+  for (var i = 0; i < lines.length; i++) {
+    final line = lines[i];
+    if (line.trim().isEmpty) continue;
+    if (_chapterTitleRe.hasMatch(line)) {
+      lines[i] = line.trim();
+      continue;
+    }
+    final body = line.trimLeft();
+    if (body.startsWith('　　')) continue;
+    lines[i] = '　　$body';
+  }
+  text = lines.join('\n');
   return text;
 }
 
