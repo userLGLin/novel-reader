@@ -19,6 +19,9 @@ class Store {
   /// 数据版本号：书籍增删或进度变化时自增，各页据此刷新
   final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
+  /// 最近打开书籍的正文本缓存（最多 2 本），重开秒进
+  final Map<String, String> _textCache = {};
+
   double fontSize = 18;
   int themeIndex = 0;
 
@@ -81,10 +84,13 @@ class Store {
       title = title.substring(0, title.length - 4);
     }
     final now = DateTime.now().millisecondsSinceEpoch;
+    final chapters = splitChapters(text);
     final book = Book(
       id: id,
       title: title.isEmpty ? '未命名' : title,
       author: _extractAuthor(text),
+      chapterTitles: [for (final c in chapters) c.title],
+      chapterStarts: [for (final c in chapters) c.start],
       addedAt: now,
       lastReadAt: now,
       totalChars: text.length,
@@ -93,6 +99,27 @@ class Store {
     await _saveBooks();
     revision.value++;
     return book;
+  }
+
+  /// 取章节表：优先用导入时存好的，没有（老数据）就现算并回写
+  List<Chapter> chaptersFor(Book book, String text) {
+    final titles = book.chapterTitles;
+    final starts = book.chapterStarts;
+    if (titles != null &&
+        starts != null &&
+        titles.isNotEmpty &&
+        titles.length == starts.length) {
+      return [
+        for (var i = 0; i < starts.length; i++)
+          Chapter(titles[i], starts[i],
+              i + 1 < starts.length ? starts[i + 1] : text.length)
+      ];
+    }
+    final chapters = splitChapters(text);
+    book.chapterTitles = [for (final c in chapters) c.title];
+    book.chapterStarts = [for (final c in chapters) c.start];
+    _saveBooks();
+    return chapters;
   }
 
   /// 从正文开头找 "作者：xxx"
@@ -104,15 +131,28 @@ class Store {
   }
 
   Future<String> loadText(Book book) async {
-    if (kIsWeb) {
-      return _prefs.getString('text_${book.id}') ?? '';
+    final hit = _textCache.remove(book.id);
+    if (hit != null) {
+      _textCache[book.id] = hit;
+      return hit;
     }
-    final dir = await _booksDir();
-    return File('${dir.path}/${book.id}.txt').readAsString();
+    String text;
+    if (kIsWeb) {
+      text = _prefs.getString('text_${book.id}') ?? '';
+    } else {
+      final dir = await _booksDir();
+      text = await File('${dir.path}/${book.id}.txt').readAsString();
+    }
+    _textCache[book.id] = text;
+    while (_textCache.length > 2) {
+      _textCache.remove(_textCache.keys.first);
+    }
+    return text;
   }
 
   Future<void> delete(Book book) async {
     books.removeWhere((b) => b.id == book.id);
+    _textCache.remove(book.id);
     if (kIsWeb) {
       await _prefs.remove('text_${book.id}');
     } else {

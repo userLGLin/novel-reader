@@ -10,6 +10,8 @@ class Book {
   final int addedAt;
   String? author;
   String? chapterTitle; // 上次读到的章节名（书架展示用）
+  List<String>? chapterTitles; // 导入时预解析的章节表
+  List<int>? chapterStarts;
   int lastReadAt;
   int chapterIndex; // 上次读到的章节
   int charOffset; // 章节内字符偏移
@@ -23,6 +25,8 @@ class Book {
     required this.lastReadAt,
     this.author,
     this.chapterTitle,
+    this.chapterTitles,
+    this.chapterStarts,
     this.chapterIndex = 0,
     this.charOffset = 0,
     this.absOffset = 0,
@@ -37,6 +41,8 @@ class Book {
         'title': title,
         'author': author,
         'chapterTitle': chapterTitle,
+        'chapterTitles': chapterTitles,
+        'chapterStarts': chapterStarts,
         'addedAt': addedAt,
         'lastReadAt': lastReadAt,
         'chapterIndex': chapterIndex,
@@ -50,6 +56,8 @@ class Book {
         title: j['title'] as String,
         author: j['author'] as String?,
         chapterTitle: j['chapterTitle'] as String?,
+        chapterTitles: (j['chapterTitles'] as List?)?.cast<String>(),
+        chapterStarts: (j['chapterStarts'] as List?)?.cast<int>(),
         addedAt: j['addedAt'] as int,
         lastReadAt: j['lastReadAt'] as int,
         chapterIndex: j['chapterIndex'] as int? ?? 0,
@@ -108,20 +116,34 @@ final RegExp _chapterTitleRe = RegExp(
   multiLine: true,
 );
 
-/// 按“第X章/回/卷…”等标题行切分章节；识别不出来就按篇幅均分
+/// 按“第X章/回/卷…”等标题行切分章节；识别不出来就按篇幅均分。
+/// 逐行扫描 + 每行短正则，避免在大文本上跑 multiline 正则（大书快一个量级）。
 List<Chapter> splitChapters(String text) {
-  final matches = _chapterTitleRe.allMatches(text).toList();
-  if (matches.length >= 2) {
-    final chapters = <Chapter>[];
-    if (matches.first.start > 0 &&
-        text.substring(0, matches.first.start).trim().isNotEmpty) {
-      chapters.add(Chapter('开头', 0, matches.first.start));
+  final titles = <String>[];
+  final starts = <int>[];
+  var lineStart = 0;
+  while (lineStart <= text.length) {
+    final nl = text.indexOf('\n', lineStart);
+    final lineEnd = nl < 0 ? text.length : nl;
+    if (lineEnd > lineStart) {
+      final title = _matchChapterTitle(text.substring(lineStart, lineEnd));
+      if (title != null) {
+        titles.add(title);
+        starts.add(lineStart);
+      }
     }
-    for (var i = 0; i < matches.length; i++) {
-      final m = matches[i];
-      final end = i + 1 < matches.length ? matches[i + 1].start : text.length;
-      final title = (m.group(1) ?? '').trim();
-      chapters.add(Chapter(title.isEmpty ? '第 ${i + 1} 章' : title, m.start, end));
+    if (nl < 0) break;
+    lineStart = nl + 1;
+  }
+  if (titles.length >= 2) {
+    final chapters = <Chapter>[];
+    if (starts.first > 0 &&
+        text.substring(0, starts.first).trim().isNotEmpty) {
+      chapters.add(Chapter('开头', 0, starts.first));
+    }
+    for (var i = 0; i < titles.length; i++) {
+      final end = i + 1 < starts.length ? starts[i + 1] : text.length;
+      chapters.add(Chapter(titles[i], starts[i], end));
     }
     return chapters;
   }
@@ -141,4 +163,27 @@ List<Chapter> splitChapters(String text) {
   }
   if (chapters.isEmpty) chapters.add(const Chapter('正文', 0, 0));
   return chapters;
+}
+
+const _numerals = '零一二三四五六七八九十百千万两';
+
+/// 单行是否是章节标题，是则返回标题文本
+String? _matchChapterTitle(String line) {
+  var i = 0;
+  while (i < line.length &&
+      (line[i] == ' ' || line[i] == '\t' || line[i] == '　')) {
+    i++;
+  }
+  if (i >= line.length) return null;
+  final c = line[i];
+  final code = c.codeUnitAt(0);
+  final isDigit = code >= 0x30 && code <= 0x39;
+  const specials = '第序楔尾番';
+  if (!isDigit && !_numerals.contains(c) && !specials.contains(c)) {
+    return null;
+  }
+  final m = _chapterTitleRe.firstMatch(line);
+  if (m == null) return null;
+  final title = (m.group(1) ?? '').trim();
+  return title.isEmpty ? null : title;
 }

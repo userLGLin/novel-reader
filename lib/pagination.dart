@@ -97,6 +97,26 @@ class ChapterPaginator {
   }
 }
 
+/// 全局分页缓存（跨阅读器实例，重开同一本书直接命中）
+class PageCache {
+  static final Map<String, List<PageSlice>> _map = {};
+
+  static List<PageSlice>? get(String key) {
+    final v = _map.remove(key);
+    if (v != null) {
+      _map[key] = v; // 刷新 LRU 顺序
+    }
+    return v;
+  }
+
+  static void put(String key, List<PageSlice> pages) {
+    _map[key] = pages;
+    while (_map.length > 24) {
+      _map.remove(_map.keys.first);
+    }
+  }
+}
+
 /// 一次性分完整个章节（页面显示的同步路径）
 List<PageSlice> paginateChapter(
   String text, {

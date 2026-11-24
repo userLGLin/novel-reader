@@ -32,8 +32,10 @@ class _ReaderPageState extends State<ReaderPage> {
   bool _loading = true;
   String? _error;
 
-  /// 章节分页缓存：键 = 章节|宽度|高度|字号
-  final Map<String, List<PageSlice>> _pageCache = {};
+  /// 章节分页缓存键前缀（含书名，跨实例复用）
+  String _pageKey(int chapter, double w, double h) =>
+      '${widget.book.id}|$chapter|$w|$h|${_store.fontSize}';
+
   String? _prefetchKey;
   ChapterPaginator? _prefetcher;
   bool _prefetchRunning = false;
@@ -47,7 +49,7 @@ class _ReaderPageState extends State<ReaderPage> {
   Future<void> _load() async {
     try {
       final text = await _store.loadText(widget.book);
-      final chapters = splitChapters(text);
+      final chapters = _store.chaptersFor(widget.book, text);
       _text = text;
       _chapters = chapters;
       _chapterIndex = widget.book.chapterIndex.clamp(0, chapters.length - 1);
@@ -84,13 +86,13 @@ class _ReaderPageState extends State<ReaderPage> {
     _cacheKey = key;
     final (content, contentStart) = _chapterContent(_chapterIndex);
     _contentStartInChapter = contentStart;
-    final cached = _pageCache[key];
+    final cached = PageCache.get(_pageKey(_chapterIndex, w, h));
     if (cached != null) {
       _pages = cached;
     } else {
       _pages = paginateChapter(content,
           width: w, height: h, fontSize: _store.fontSize);
-      _putCache(key, _pages);
+      PageCache.put(_pageKey(_chapterIndex, w, h), _pages);
     }
     final rel = _offset - contentStart;
     var idx = rel <= 0 ? 0 : _pages.indexWhere((p) => rel < p.end);
@@ -100,19 +102,12 @@ class _ReaderPageState extends State<ReaderPage> {
     _schedulePrefetch(w, h);
   }
 
-  void _putCache(String key, List<PageSlice> pages) {
-    _pageCache[key] = pages;
-    while (_pageCache.length > 10) {
-      _pageCache.remove(_pageCache.keys.first);
-    }
-  }
-
   /// 分帧预热下一章：每次只算 2 页，避免可感知的卡顿
   void _schedulePrefetch(double w, double h) {
     final next = _chapterIndex + 1;
     if (next >= _chapters.length) return;
-    final key = '$next|$w|$h|${_store.fontSize}';
-    if (_pageCache.containsKey(key)) return;
+    final key = _pageKey(next, w, h);
+    if (PageCache.get(key) != null) return;
     if (_prefetchRunning && _prefetchKey == key) return;
     final (content, _) = _chapterContent(next);
     _prefetchKey = key;
@@ -136,7 +131,7 @@ class _ReaderPageState extends State<ReaderPage> {
     p.advance(2);
     if (p.done) {
       final key = _prefetchKey;
-      if (key != null) _putCache(key, List.of(p.pages));
+      if (key != null) PageCache.put(key, List.of(p.pages));
       _prefetcher = null;
       _prefetchKey = null;
       _prefetchRunning = false;
