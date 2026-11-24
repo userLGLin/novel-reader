@@ -30,6 +30,11 @@ void main() {
       final bytes = Uint8List.fromList(utf8.encode('a\r\nb\rc'));
       expect(decodeTxt(bytes), 'a\nb\nc');
     });
+
+    test('连续空格分隔的段落转成换行', () {
+      final bytes = Uint8List.fromList(utf8.encode('第一段。    第二段。\n第三段。'));
+      expect(decodeTxt(bytes), '第一段。\n第二段。\n第三段。');
+    });
   });
 
   group('splitChapters', () {
@@ -43,6 +48,31 @@ void main() {
       expect(chapters[3].title, '第3章 高潮');
       expect(text.substring(chapters[1].start, chapters[1].end),
           '第一章 开始\n正文一\n');
+    });
+
+    test('无"第"字的章节标题', () {
+      const text = '八十章 一码归一码\n正文A\n八十一章 帅不过三秒\n正文B';
+      final chapters = splitChapters(text);
+      expect(chapters.length, 2);
+      expect(chapters[0].title, '八十章 一码归一码');
+      expect(chapters[1].title, '八十一章 帅不过三秒');
+    });
+
+    test('数字+空格形式的章节标题', () {
+      const text = '一 原来不是梦\n正文A\n十二 会抢戏的王固执\n正文B\n六百二十八章 终章\n正文C';
+      final chapters = splitChapters(text);
+      expect(chapters.length, 3);
+      expect(chapters[0].title, '一 原来不是梦');
+      expect(chapters[1].title, '十二 会抢戏的王固执');
+      expect(chapters[2].title, '六百二十八章 终章');
+    });
+
+    test('正文行不会被误判成章节', () {
+      const text = '一 标题一\n十六回眸一笑百媚生，这一回他转身便走。\n十年前的事情还历历在目，他叹了口气。\n二 标题二\n正文。';
+      final chapters = splitChapters(text);
+      expect(chapters.length, 2);
+      expect(chapters[0].title, '一 标题一');
+      expect(chapters[1].title, '二 标题二');
     });
 
     test('楔子/番外也能识别', () {
