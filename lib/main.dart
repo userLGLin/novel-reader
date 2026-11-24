@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'pages/bookshelf_page.dart';
+import 'pages/home_page.dart';
 import 'store.dart';
 
 Future<void> main() async {
@@ -21,7 +21,7 @@ class ReaderApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.brown),
         useMaterial3: true,
       ),
-      home: const BookshelfPage(),
+      home: const HomePage(),
     );
   }
 }

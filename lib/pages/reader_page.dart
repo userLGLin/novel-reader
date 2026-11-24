@@ -185,6 +185,7 @@ class _ReaderPageState extends State<ReaderPage> {
       chapterIndex: _chapterIndex,
       charOffset: _offset,
       absOffset: _chapter.start + _offset,
+      chapterTitle: _chapter.title,
     );
   }
 

@@ -16,6 +16,9 @@ class Store {
   late SharedPreferences _prefs;
   final List<Book> books = [];
 
+  /// 数据版本号：书籍增删或进度变化时自增，各页据此刷新
+  final ValueNotifier<int> revision = ValueNotifier<int>(0);
+
   double fontSize = 18;
   int themeIndex = 0;
 
@@ -81,13 +84,23 @@ class Store {
     final book = Book(
       id: id,
       title: title.isEmpty ? '未命名' : title,
+      author: _extractAuthor(text),
       addedAt: now,
       lastReadAt: now,
       totalChars: text.length,
     );
     books.add(book);
     await _saveBooks();
+    revision.value++;
     return book;
+  }
+
+  /// 从正文开头找 "作者：xxx"
+  static String? _extractAuthor(String text) {
+    final head = text.substring(0, text.length < 3000 ? text.length : 3000);
+    final m = RegExp(r'作\s*者\s*[:：]\s*([^\n]{1,30})').firstMatch(head);
+    final name = m?.group(1)?.trim();
+    return (name == null || name.isEmpty) ? null : name;
   }
 
   Future<String> loadText(Book book) async {
@@ -108,6 +121,7 @@ class Store {
       if (await f.exists()) await f.delete();
     }
     await _saveBooks();
+    revision.value++;
   }
 
   Future<void> saveProgress(
@@ -115,11 +129,16 @@ class Store {
     required int chapterIndex,
     required int charOffset,
     required int absOffset,
+    String? chapterTitle,
   }) async {
     book.chapterIndex = chapterIndex;
     book.charOffset = charOffset;
     book.absOffset = absOffset;
+    if (chapterTitle != null && chapterTitle.isNotEmpty) {
+      book.chapterTitle = chapterTitle;
+    }
     book.lastReadAt = DateTime.now().millisecondsSinceEpoch;
     await _saveBooks();
+    revision.value++;
   }
 }

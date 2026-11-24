@@ -8,6 +8,8 @@ class Book {
   final String id;
   final String title;
   final int addedAt;
+  String? author;
+  String? chapterTitle; // 上次读到的章节名（书架展示用）
   int lastReadAt;
   int chapterIndex; // 上次读到的章节
   int charOffset; // 章节内字符偏移
@@ -19,6 +21,8 @@ class Book {
     required this.title,
     required this.addedAt,
     required this.lastReadAt,
+    this.author,
+    this.chapterTitle,
     this.chapterIndex = 0,
     this.charOffset = 0,
     this.absOffset = 0,
@@ -31,6 +35,8 @@ class Book {
   Map<String, dynamic> toJson() => {
         'id': id,
         'title': title,
+        'author': author,
+        'chapterTitle': chapterTitle,
         'addedAt': addedAt,
         'lastReadAt': lastReadAt,
         'chapterIndex': chapterIndex,
@@ -42,6 +48,8 @@ class Book {
   factory Book.fromJson(Map<String, dynamic> j) => Book(
         id: j['id'] as String,
         title: j['title'] as String,
+        author: j['author'] as String?,
+        chapterTitle: j['chapterTitle'] as String?,
         addedAt: j['addedAt'] as int,
         lastReadAt: j['lastReadAt'] as int,
         chapterIndex: j['chapterIndex'] as int? ?? 0,

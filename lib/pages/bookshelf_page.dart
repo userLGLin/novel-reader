@@ -1,9 +1,210 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../import_action.dart';
 import '../models.dart';
 import '../store.dart';
 import 'reader_page.dart';
+
+const _coverPalettes = <List<Color>>[
+  [Color(0xFF8D6E63), Color(0xFF4E342E)],
+  [Color(0xFF7986CB), Color(0xFF303F9F)],
+  [Color(0xFF4DB6AC), Color(0xFF00695C)],
+  [Color(0xFFE57373), Color(0xFFB71C1C)],
+  [Color(0xFF90A4AE), Color(0xFF455A64)],
+  [Color(0xFF9575CD), Color(0xFF4527A0)],
+];
+
+class BookCover extends StatelessWidget {
+  final String title;
+  final double width;
+  final double height;
+  const BookCover(
+      {super.key, required this.title, this.width = 60, this.height = 84});
+
+  @override
+  Widget build(BuildContext context) {
+    final h = title.codeUnits.fold<int>(0, (a, b) => a + b);
+    final colors = _coverPalettes[h % _coverPalettes.length];
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(6),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: colors,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(6),
+      alignment: Alignment.topCenter,
+      child: Text(
+        title,
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: Colors.white.withValues(alpha: 0.92),
+          fontSize: width / 6,
+          fontWeight: FontWeight.w600,
+          height: 1.4,
+        ),
+      ),
+    );
+  }
+}
+
+class BookRow extends StatelessWidget {
+  final Book book;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  final bool compact;
+  const BookRow({
+    super.key,
+    required this.book,
+    required this.onTap,
+    this.onLongPress,
+    this.compact = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = book.progress * 100;
+    if (compact) {
+      return InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              BookCover(title: book.title, width: 42, height: 58),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      book.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '读到 ${book.chapterTitle ?? '尚未开始'} · ${pct.toStringAsFixed(1)}%',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style:
+                          const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return InkWell(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            BookCover(title: book.title, width: 60, height: 84),
+            const SizedBox(width: 12),
+            Expanded(
+              child: SizedBox(
+                height: 84,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      book.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 4),
+                    if (book.author != null)
+                      Row(
+                        children: [
+                          const Icon(Icons.person_outline,
+                              size: 12, color: Colors.grey),
+                          const SizedBox(width: 3),
+                          Expanded(
+                            child: Text(
+                              book.author!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.grey),
+                            ),
+                          ),
+                        ],
+                      ),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        const Icon(Icons.bookmark_border,
+                            size: 12, color: Colors.grey),
+                        const SizedBox(width: 3),
+                        Expanded(
+                          child: Text(
+                            '读到 ${book.chapterTitle ?? '尚未开始'}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                const TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Spacer(),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(2),
+                            child: LinearProgressIndicator(
+                              value: book.progress,
+                              minHeight: 3,
+                              backgroundColor: Colors.grey.shade200,
+                              color: const Color(0xFFE57373),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${pct.toStringAsFixed(1)}%',
+                          style: const TextStyle(
+                              fontSize: 11, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class BookshelfPage extends StatefulWidget {
   const BookshelfPage({super.key});
@@ -17,21 +218,12 @@ class _BookshelfPageState extends State<BookshelfPage> {
   bool _importing = false;
 
   Future<void> _import() async {
-    final f = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: ['txt'],
-    );
-    if (f == null) return;
     setState(() => _importing = true);
     try {
-      final bytes = await f.readAsBytes();
-      final book = await _store.importTxt(f.name, bytes);
-      if (mounted) {
-        setState(() {});
-        _toast('已导入《${book.title}》');
-      }
+      final name = await pickAndImportTxt(context);
+      if (name != null && mounted) showToast(context, '已导入《$name》');
     } catch (e) {
-      if (mounted) _toast('导入失败：$e');
+      if (mounted) showToast(context, '导入失败：$e');
     } finally {
       if (mounted) setState(() => _importing = false);
     }
@@ -51,39 +243,22 @@ class _BookshelfPageState extends State<BookshelfPage> {
         ],
       ),
     );
-    if (ok == true) {
-      await _store.delete(book);
-      if (mounted) setState(() {});
-    }
+    if (ok == true) await _store.delete(book);
   }
 
   void _open(Book book) {
     Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => ReaderPage(book: book)))
-        .then((_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  void _toast(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), duration: const Duration(seconds: 2)));
-  }
-
-  String _fmtTime(int ms) {
-    final t = DateTime.fromMillisecondsSinceEpoch(ms);
-    final now = DateTime.now();
-    if (t.year == now.year && t.month == now.month && t.day == now.day) {
-      return '今天 ${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-    }
-    return '${t.month}月${t.day}日';
+        .push(MaterialPageRoute(builder: (_) => ReaderPage(book: book)));
   }
 
   @override
   Widget build(BuildContext context) {
-    final books = _store.books;
     return Scaffold(
-      appBar: AppBar(title: const Text('书架')),
+      appBar: AppBar(
+        title: const Text('书架',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+        centerTitle: false,
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _importing ? null : _import,
         icon: const Icon(Icons.add),
@@ -91,8 +266,12 @@ class _BookshelfPageState extends State<BookshelfPage> {
       ),
       body: Stack(
         children: [
-          books.isEmpty
-              ? const Center(
+          ValueListenableBuilder<int>(
+            valueListenable: _store.revision,
+            builder: (context, _, __) {
+              final books = _store.books;
+              if (books.isEmpty) {
+                return const Center(
                   child: Padding(
                     padding: EdgeInsets.all(32),
                     child: Text(
@@ -101,48 +280,24 @@ class _BookshelfPageState extends State<BookshelfPage> {
                       style: TextStyle(color: Colors.grey, height: 1.8),
                     ),
                   ),
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.only(bottom: 96),
-                  itemCount: books.length,
-                  separatorBuilder: (_, __) =>
-                      const Divider(height: 1, indent: 76),
-                  itemBuilder: (context, i) {
-                    final b = books[i];
-                    return ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      leading: Container(
-                        width: 44,
-                        height: 60,
-                        decoration: BoxDecoration(
-                          color: Colors.brown.shade300,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          b.title.isEmpty ? '书' : b.title.characters.first,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      title: Text(b.title,
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          '读到 ${(b.progress * 100).toStringAsFixed(1)}% · ${_fmtTime(b.lastReadAt)}',
-                          style:
-                              const TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                      ),
-                      onTap: () => _open(b),
-                      onLongPress: () => _confirmDelete(b),
-                    );
-                  },
-                ),
+                );
+              }
+              return ListView.separated(
+                padding: const EdgeInsets.only(bottom: 96),
+                itemCount: books.length,
+                separatorBuilder: (_, __) =>
+                    const Divider(height: 1, indent: 16, endIndent: 16),
+                itemBuilder: (context, i) {
+                  final b = books[i];
+                  return BookRow(
+                    book: b,
+                    onTap: () => _open(b),
+                    onLongPress: () => _confirmDelete(b),
+                  );
+                },
+              );
+            },
+          ),
           if (_importing)
             Container(
               color: Colors.black26,
