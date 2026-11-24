@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'booklist_page.dart';
+import 'book_source_page.dart';
 import 'bookshelf_page.dart';
 import 'discover_page.dart';
 import 'profile_page.dart';
@@ -18,7 +18,7 @@ class _HomePageState extends State<HomePage> {
   static const _pages = [
     BookshelfPage(),
     DiscoverPage(),
-    BooklistPage(),
+    BookSourcePage(),
     ProfilePage(),
   ];
 
@@ -47,9 +47,9 @@ class _HomePageState extends State<HomePage> {
             label: '发现',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.bookmark_add_outlined),
-            activeIcon: Icon(Icons.bookmark_add),
-            label: '书单',
+            icon: Icon(Icons.rss_feed_outlined),
+            activeIcon: Icon(Icons.rss_feed),
+            label: '书源',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
